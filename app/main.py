@@ -13,11 +13,6 @@ app = FastAPI(title="ERP Integration API")
 
 app.include_router(vendor_router.router)
 app.include_router(tax_code_router.router)
-
 app.include_router(nominal_account_router.router)
-
-
 app.include_router(department_router.router)
-
-
 app.include_router(invoice_router.router)

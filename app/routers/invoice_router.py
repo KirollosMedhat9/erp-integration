@@ -1,21 +1,27 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
-from app.services.invoice_import_service import InvoiceImportService
+from app.services.invoice_service import InvoiceService
+from app.schemas.invoice_schema import InvoiceCreate
 
-router = APIRouter()
+router = APIRouter(
+    prefix="/invoices",
+    tags=["Invoices"]
+)
+
 
 def get_db():
     db = SessionLocal()
     try:
         yield db
     finally:
-        db.close() 
+        db.close()
 
-@router.post("/invoices/import-csv")
-def import_invoices(db: Session = Depends(get_db)):
-    service = InvoiceImportService(db)
-    df = service.load_csv("dataset/line_items.csv")
-    service.upsert_master_data(df)
-    service.import_invoices(df)
-    return {"message": f"{len(df)} rows imported successfully."}
+
+@router.post("/", status_code=status.HTTP_201_CREATED)
+def create_invoice(
+    payload: InvoiceCreate,
+    db: Session = Depends(get_db)
+):
+    service = InvoiceService(db)
+    return service.create_invoice(payload)
