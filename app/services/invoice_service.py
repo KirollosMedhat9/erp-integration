@@ -1,12 +1,12 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
-from app.models.invoice import Invoice
-from app.models.invoice_line import InvoiceLine
+from app.models.invoice import Invoice, InvoiceLine
 from app.models.vendor import Vendor
-from app.models.tax_code import TaxCode 
+from app.models.tax_code import TaxCode
 from app.models.nominal_account import NominalAccount
 from app.models.department import Department
 from app.schemas.invoice_schema import InvoiceCreate
+
 
 class InvoiceService:
 
@@ -41,19 +41,18 @@ class InvoiceService:
                 }
             )
 
-        # Atomic transaction
+        # Atomic behavior: perform operations and commit once. If any error occurs
+        # we rollback to ensure no partial data is persisted.
         try:
-            with self.db.begin():
+            invoice = Invoice(
+                external_invoice_id=payload.external_invoice_id,
+                vendor_id=vendor.id,
+                invoice_date=payload.invoice_date
+            )
+            self.db.add(invoice)
+            self.db.flush()  # get invoice.id
 
-                invoice = Invoice(
-                    external_invoice_id=payload.external_invoice_id,
-                    vendor_id=vendor.id,
-                    invoice_date=payload.invoice_date
-                )
-                self.db.add(invoice)
-                self.db.flush()  # get invoice.id
-
-                for idx, line in enumerate(payload.lines):
+            for idx, line in enumerate(payload.lines):
 
                     tax_code = self.db.query(TaxCode).filter(
                         TaxCode.external_id == line.tax_code_external_id
@@ -122,8 +121,15 @@ class InvoiceService:
 
                     self.db.add(invoice_line)
 
+            # commit after all lines are added
+            self.db.commit()
             return invoice
 
         except HTTPException:
+            # rollback on errors that are intentionally raised
             self.db.rollback()
             raise
+        except Exception:
+            # unexpected errors - rollback and raise HTTP 500
+            self.db.rollback()
+            raise HTTPException(status_code=500, detail={"error_code": "INTERNAL_ERROR"})
